@@ -150,13 +150,13 @@ import org.apache.iotdb.db.exception.BatchProcessException;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.PathNotExistException;
 import org.apache.iotdb.db.exception.metadata.SchemaQuotaExceededException;
-import org.apache.iotdb.db.exception.sql.SemanticException;
 import org.apache.iotdb.db.pipe.agent.PipeDataNodeAgent;
 import org.apache.iotdb.db.protocol.client.ConfigNodeClient;
 import org.apache.iotdb.db.protocol.client.ConfigNodeClientManager;
 import org.apache.iotdb.db.protocol.client.ConfigNodeInfo;
 import org.apache.iotdb.db.protocol.client.DataNodeClientPoolFactory;
 import org.apache.iotdb.db.protocol.session.IClientSession;
+import org.apache.iotdb.db.protocol.session.SessionManager;
 import org.apache.iotdb.db.queryengine.common.MPPQueryContext;
 import org.apache.iotdb.db.queryengine.common.SessionInfo;
 import org.apache.iotdb.db.queryengine.common.schematree.ISchemaTree;
@@ -1344,19 +1344,29 @@ public class ClusterConfigTaskExecutor implements IConfigTaskExecutor {
   public SettableFuture<ConfigTaskResult> killQuery(final KillQueryStatement killQueryStatement) {
     int dataNodeId = -1;
     String queryId = killQueryStatement.getQueryId();
+    SettableFuture<ConfigTaskResult> future = SettableFuture.create();
     if (!killQueryStatement.isKillAll()) {
       String[] splits = queryId.split("_");
       try {
         // We just judge the input queryId has three '_' and the DataNodeId from it is non-negative
         // here
         if (splits.length != 4 || ((dataNodeId = Integer.parseInt(splits[3])) < 0)) {
-          throw new SemanticException("Please ensure your input <queryId> is correct");
+          future.setException(
+              new IoTDBException(
+                  "Please ensure your input <queryId> is correct",
+                  TSStatusCode.SEMANTIC_ERROR.getStatusCode(),
+                  true));
+          return future;
         }
       } catch (NumberFormatException e) {
-        throw new SemanticException("Please ensure your input <queryId> is correct");
+        future.setException(
+            new IoTDBException(
+                "Please ensure your input <queryId> is correct",
+                TSStatusCode.SEMANTIC_ERROR.getStatusCode(),
+                true));
+        return future;
       }
     }
-    SettableFuture<ConfigTaskResult> future = SettableFuture.create();
     try (ConfigNodeClient client =
         CONFIG_NODE_CLIENT_MANAGER.borrowClient(ConfigNodeInfo.CONFIG_REGION_ID)) {
       final TSStatus executionStatus = client.killQuery(queryId, dataNodeId);
@@ -1433,6 +1443,18 @@ public class ClusterConfigTaskExecutor implements IConfigTaskExecutor {
   public SettableFuture<ConfigTaskResult> showCurrentSqlDialect(final String sqlDialect) {
     final SettableFuture<ConfigTaskResult> future = SettableFuture.create();
     ShowCurrentSqlDialectTask.buildTsBlock(sqlDialect, future);
+    return future;
+  }
+
+  @Override
+  public SettableFuture<ConfigTaskResult> setSqlDialect(IClientSession.SqlDialect sqlDialect) {
+    final SettableFuture<ConfigTaskResult> future = SettableFuture.create();
+    try {
+      SessionManager.getInstance().getCurrSession().setSqlDialect(sqlDialect);
+      future.set(new ConfigTaskResult(TSStatusCode.SUCCESS_STATUS));
+    } catch (Exception e) {
+      future.setException(e);
+    }
     return future;
   }
 
