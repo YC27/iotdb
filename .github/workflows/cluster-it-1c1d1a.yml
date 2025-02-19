@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - 'collector-*'
       - 'rel/1.*'
       - 'rc/1.*'
       - 'force_ci/**'
@@ -13,6 +14,7 @@ on:
   pull_request:
     branches:
       - master
+      - 'collector-*'
       - 'rel/1.*'
       - 'rc/1.*'
       - 'force_ci/**'

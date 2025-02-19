@@ -8,6 +8,7 @@ on:
     branches:
       - master
       - 'rel/*'
+      - 'collector-*'
       - "rc/*"
       - 'force_ci/**'
     paths-ignore:
@@ -16,6 +17,7 @@ on:
   pull_request:
     branches:
       - master
+      - 'collector-*'
       - 'rel/*'
       - "rc/*"
       - 'force_ci/**'
