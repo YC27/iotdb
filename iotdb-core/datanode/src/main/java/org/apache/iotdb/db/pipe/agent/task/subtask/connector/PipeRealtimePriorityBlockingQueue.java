@@ -25,7 +25,7 @@ import org.apache.iotdb.commons.pipe.config.PipeConfig;
 import org.apache.iotdb.commons.pipe.event.EnrichedEvent;
 import org.apache.iotdb.db.pipe.agent.task.connection.PipeEventCollector;
 import org.apache.iotdb.db.pipe.event.common.heartbeat.PipeHeartbeatEvent;
-import org.apache.iotdb.db.pipe.metric.PipeDataRegionEventCounter;
+import org.apache.iotdb.db.pipe.metric.source.PipeDataRegionEventCounter;
 import org.apache.iotdb.pipe.api.event.Event;
 import org.apache.iotdb.pipe.api.event.dml.insertion.TsFileInsertionEvent;
 
@@ -51,6 +51,8 @@ public class PipeRealtimePriorityBlockingQueue extends UnboundedBlockingPendingQ
 
   @Override
   public boolean directOffer(final Event event) {
+    checkBeforeOffer(event);
+
     if (event instanceof TsFileInsertionEvent) {
       tsfileInsertEventDeque.add((TsFileInsertionEvent) event);
       return true;
@@ -84,9 +86,10 @@ public class PipeRealtimePriorityBlockingQueue extends UnboundedBlockingPendingQ
       eventCount.set(0);
     }
     if (Objects.isNull(event)) {
+      // Sequentially poll the first offered non-TsFileInsertionEvent
       event = super.directPoll();
       if (Objects.isNull(event)) {
-        event = tsfileInsertEventDeque.pollLast();
+        event = tsfileInsertEventDeque.pollFirst();
       }
       if (event != null) {
         eventCount.incrementAndGet();
@@ -118,8 +121,7 @@ public class PipeRealtimePriorityBlockingQueue extends UnboundedBlockingPendingQ
       // Sequentially poll the first offered non-TsFileInsertionEvent
       event = super.directPoll();
       if (event == null && !tsfileInsertEventDeque.isEmpty()) {
-        // Always poll the last offered event
-        event = tsfileInsertEventDeque.pollLast();
+        event = tsfileInsertEventDeque.pollFirst();
       }
       if (event != null) {
         eventCount.incrementAndGet();
@@ -130,7 +132,7 @@ public class PipeRealtimePriorityBlockingQueue extends UnboundedBlockingPendingQ
     if (Objects.isNull(event)) {
       event = super.waitedPoll();
       if (Objects.isNull(event)) {
-        event = tsfileInsertEventDeque.pollLast();
+        event = tsfileInsertEventDeque.pollFirst();
       }
       if (event != null) {
         eventCount.incrementAndGet();

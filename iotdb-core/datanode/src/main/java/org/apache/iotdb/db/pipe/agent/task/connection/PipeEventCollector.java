@@ -55,6 +55,10 @@ public class PipeEventCollector implements EventCollector {
 
   private final boolean forceTabletFormat;
 
+  private final boolean skipParseTsFile;
+
+  private final boolean isUsedForConsensusPipe;
+
   private final AtomicInteger collectInvocationCount = new AtomicInteger(0);
   private boolean hasNoGeneratedEvent = true;
   private boolean isFailedToIncreaseReferenceCount = false;
@@ -63,11 +67,15 @@ public class PipeEventCollector implements EventCollector {
       final UnboundedBlockingPendingQueue<Event> pendingQueue,
       final long creationTime,
       final int regionId,
-      final boolean forceTabletFormat) {
+      final boolean forceTabletFormat,
+      final boolean skipParseTsFile,
+      final boolean isUsedInConsensusPipe) {
     this.pendingQueue = pendingQueue;
     this.creationTime = creationTime;
     this.regionId = regionId;
     this.forceTabletFormat = forceTabletFormat;
+    this.skipParseTsFile = skipParseTsFile;
+    this.isUsedForConsensusPipe = isUsedInConsensusPipe;
   }
 
   @Override
@@ -92,6 +100,7 @@ public class PipeEventCollector implements EventCollector {
   }
 
   private void parseAndCollectEvent(final PipeInsertNodeTabletInsertionEvent sourceEvent) {
+    // TODO: let subscription module fully manage the parsing process of the insert node event
     if (sourceEvent.shouldParseTimeOrPattern()) {
       for (final PipeRawTabletInsertionEvent parsedEvent :
           sourceEvent.toRawTabletInsertionEvents()) {
@@ -114,6 +123,11 @@ public class PipeEventCollector implements EventCollector {
       LOGGER.warn(
           "Pipe skipping temporary TsFile which shouldn't be transferred: {}",
           sourceEvent.getTsFile());
+      return;
+    }
+
+    if (skipParseTsFile) {
+      collectEvent(sourceEvent);
       return;
     }
 
@@ -144,6 +158,13 @@ public class PipeEventCollector implements EventCollector {
   }
 
   private void parseAndCollectEvent(final PipeDeleteDataNodeEvent deleteDataEvent) {
+    // For IoTConsensusV2, there is no need to parse. So we can directly transfer deleteDataEvent
+    if (isUsedForConsensusPipe) {
+      hasNoGeneratedEvent = false;
+      collectEvent(deleteDataEvent);
+      return;
+    }
+
     // Only used by events containing delete data node, no need to bind progress index here since
     // delete data event does not have progress index currently
     (deleteDataEvent.getDeleteDataNode() instanceof DeleteDataNode
